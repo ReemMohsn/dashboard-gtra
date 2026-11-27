@@ -1,13 +1,33 @@
+import 'package:flutter/foundation.dart';
+
 abstract final class ApiEndPoints {
   /// Base server URL — override at run/build time via:
   /// `flutter run -d chrome --dart-define=API_BASE_URL=https://your-api.example.com/`
-  static const String _rawServerUrl = String.fromEnvironment(
+  static const String _definedServerUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://qatra-api.runasp.net/',
   );
 
-  static String get serverUrl =>
-      _rawServerUrl.endsWith('/') ? _rawServerUrl : '$_rawServerUrl/';
+  static const String _defaultRemoteServerUrl =
+      'https://qatra-api.runasp.net/';
+
+  static String get serverUrl {
+    if (_definedServerUrl.isNotEmpty) {
+      return _definedServerUrl.endsWith('/')
+          ? _definedServerUrl
+          : '$_definedServerUrl/';
+    }
+
+    if (kIsWeb) {
+      final host = Uri.base.host;
+      final isLocalhost =
+          host == 'localhost' || host == '127.0.0.1' || host.isEmpty;
+      if (!isLocalhost) {
+        return '${Uri.base.origin}/';
+      }
+    }
+
+    return _defaultRemoteServerUrl;
+  }
 
   static String get baseUrl => '${serverUrl}api/';
 
