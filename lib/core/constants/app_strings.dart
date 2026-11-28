@@ -2,7 +2,6 @@ abstract final class AppStrings {
   // Brand & Header
   static const String appName = 'قطرة';
   static const String dashboardTitle = 'قطرة · لوحة الجهة المسؤولة';
-  static const String prioritiesTab = 'الأولويات';
   static const String authorityBadge = 'الجهة المسؤولة';
   static const String authorityAvatarLetter = 'ج';
   static const String refreshData = 'تحديث البيانات';
@@ -11,7 +10,7 @@ abstract final class AppStrings {
   static const String liveDataMode = 'متصل بالخادم';
   static const String demoDataMode = 'بيانات عرض تجريبية';
   static const String demoSubtitle = 'بيانات تجريبية للتوضيح';
-  static const String liveSubtitle = 'مرتبة حسب الأولوية والقاعدة الذهبية';
+  static const String liveSubtitle = 'مرتبة حسب أولوية الخادم والقاعدة الذهبية';
   static const String loadDemoData = 'تشغيل بيانات العرض التجريبية';
   static const String reconnectLiveApi = 'الاتصال بالخادم المباشر';
   static const String offlineDemoHint =
@@ -21,7 +20,6 @@ abstract final class AppStrings {
   static const String neighborhoodsByPriority = 'الأحياء حسب الأولوية';
   static const String filterAll = 'الكل';
   static const String filterUrgentHealth = 'عاجل صحي';
-  static const String filterConfirmed = 'مؤكدة';
   static const String filterInProgress = 'قيد المتابعة';
   static const String noIncidentsMatchFilter =
       'لا توجد حالات مطابقة للتصفية المحددة.';
@@ -29,8 +27,9 @@ abstract final class AppStrings {
       'لا توجد أزمات مائية نشطة في الأحياء حالياً.';
   static const String goldenRuleTooltip =
       'القاعدة الذهبية: تتصدر حالات التلوث الصحي القائمة دائماً';
+  static const String scoreTooltip = 'درجة الأولوية من 100 (محسوبة من الخادم)';
 
-  // Priority Levels
+  // Priority Levels (Map Legend & Urgent Rule)
   static const String priorityUrgentHealth = 'عاجل صحي';
   static const String priorityHigh = 'عالية';
   static const String priorityMedium = 'متوسطة';
@@ -44,27 +43,28 @@ abstract final class AppStrings {
   static const String stateExpired = 'منتهية';
 
   // Flags & Issue Types
-  static const String escalating = 'يتفاقم';
   static const String repeatIncident = 'متكررة';
+  static const String abnormalDelayShort = 'اشتباه عطل';
   static const String contaminationIssue = 'مياه ملوثة';
   static const String outageIssue = 'انقطاع';
-  static const String confidenceHigh = 'ثقة عالية';
-  static const String confidenceMedium = 'ثقة متوسطة';
-  static const String confidenceLow = 'ثقة منخفضة';
 
   // Interactive Map Panel
   static const String needMapTitle = 'خريطة الاحتياج';
   static const String mapInteractiveHint =
-      'خريطة تفاعلية تعتمد على إحداثيات الأحياء — اضغط على أي حي لعرض حالته';
+      'اضغط على أي حي لعرض حالته — يمكنك التكبير والتحريك بحرية';
   static const String selectedNeighborhood = 'الحي المحدد';
   static const String openDetails = 'فتح التفاصيل';
   static const String noActiveIncidentInNeighborhood =
       'لا توجد بلاغات نشطة في هذا الحي حالياً';
   static const String resetMapView = 'إعادة ضبط العرض';
+  static const String showAllNeighborhoods = 'عرض كل الأحياء';
+  static const String focusMainCluster = 'التركيز على التجمّع الرئيسي';
 
   // Incident Details Panel
   static const String backToMap = 'العودة إلى الخريطة';
-  static const String explanationTitle = 'الشرح';
+  static const String whyThisNeighborhoodTitle = 'لماذا هذا الحي؟';
+  static const String explanationFromAiBadge = 'تحليل الذكاء الاصطناعي';
+  static const String explanationFromTemplateBadge = 'ملخص آلي';
   static const String noExplanationAvailable =
       'لا يتوفر تبرير آلي لهذه الحالة حالياً.';
   static const String outOfHundred = 'من 100';
@@ -74,22 +74,26 @@ abstract final class AppStrings {
   static const String linkedReportsTitle = 'البلاغات المرتبطة';
   static const String noLinkedReports =
       'لا توجد بلاغات نصية مدمجة مسجّلة لهذه الحالة بعد.';
-  static const String updateStateSectionTitle = 'إدارة حالة الأزمة';
-  static const String moreStatesLabel = 'حالة أخرى';
   static const String stateUpdatedSuccess = 'تم تحديث حالة الأزمة بنجاح.';
+  static const String stateResolvedRemovedSuccess =
+      'تم إغلاق الأزمة بنجاح وإزالتها من قائمة الحالات النشطة.';
   static const String stateUpdateFailed =
       'تعذّر تحديث حالة الأزمة. يرجى المحاولة مرة أخرى.';
 
-  // Prediction Section
-  static const String predictionTitle = 'تقدير دورة الضخ وكشف الأعطال';
+  // Prediction Section (Operational Verdict + Collapsible Stats)
+  static const String predictionQuestionTitle = 'هل هو عطل أم انتظار طبيعي؟';
   static const String predictionLoading = 'جارٍ تحميل مؤشرات التنبؤ للحي...';
   static const String predictionUnavailableTitle =
       'خدمة التنبؤ غير متاحة حالياً';
   static const String predictionUnavailableSubtitle =
       'يمكنك متابعة تفاصيل الحالة واتخاذ القرار بينما تُستعاد خدمة التنبؤ.';
-  static const String abnormalDelayBadge =
-      'تأخر غير طبيعي · اشتباه عطل في الشبكة';
-  static const String normalCycleBadge = 'الدورة ضمن النطاق المعتاد';
+  static const String abnormalDelayVerdict =
+      'تأخر غير طبيعي — يُرجّح وجود عطل في الشبكة';
+  static const String insufficientHistoryVerdict =
+      'لا توجد بيانات تاريخية كافية للحكم بعد';
+  static const String normalCycleVerdict = 'ضمن الدورة المعتادة للحي';
+  static const String showStatisticalDetails = 'عرض التفاصيل الإحصائية';
+  static const String hideStatisticalDetails = 'إخفاء التفاصيل الإحصائية';
   static const String cycleMeanLabel = 'متوسط الدورة';
   static const String ci90Label = 'نطاق الثقة 90%';
   static const String probArrival2dLabel = 'احتمال الوصول خلال يومين';
@@ -100,7 +104,7 @@ abstract final class AppStrings {
   // Common Actions & Errors
   static const String retry = 'إعادة المحاولة';
   static const String loadingDashboard = 'جارٍ تحميل بيانات الأحياء والحالات...';
-  static const String loadingDetails = 'جارٍ تحميل تفاصيل الحالة...';
+  static const String loadingDetails = 'جارٍ تحديث تفاصيل الحالة...';
   static const String unsupportedServerFormat =
       'صيغة البيانات الواردة من الخادم غير مدعومة.';
   static const String operationCompleted = 'تمت العملية بنجاح.';
@@ -146,8 +150,8 @@ abstract final class AppStrings {
 
   static String relativeTime(DateTime? dateTime) {
     if (dateTime == null) return notAvailableShort;
-    final diff = DateTime.now().difference(dateTime);
-    if (diff.inMinutes < 1) return 'الآن';
+    final diff = DateTime.now().difference(dateTime.toLocal());
+    if (diff.isNegative || diff.inMinutes < 1) return 'الآن';
     if (diff.inMinutes < 60) {
       final m = diff.inMinutes;
       if (m == 1) return 'منذ دقيقة';

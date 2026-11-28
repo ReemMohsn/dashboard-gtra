@@ -29,9 +29,17 @@ class InteractiveMapPanel extends StatefulWidget {
 class _InteractiveMapPanelState extends State<InteractiveMapPanel> {
   final TransformationController _transformationController =
       TransformationController();
+  bool _focusMainCluster = true;
 
   void _resetZoom() {
     _transformationController.value = Matrix4.identity();
+  }
+
+  void _toggleClusterFocus() {
+    setState(() {
+      _focusMainCluster = !_focusMainCluster;
+      _transformationController.value = Matrix4.identity();
+    });
   }
 
   @override
@@ -44,6 +52,14 @@ class _InteractiveMapPanelState extends State<InteractiveMapPanel> {
   Widget build(BuildContext context) {
     final selectedNeighborhood = widget.state.selectedNeighborhood;
     final selectedIncident = widget.state.selectedIncident;
+    final clusterResult = _analyzeGeographicCluster(widget.state.neighborhoods);
+
+    // If user explicitly selects an outlier neighborhood, automatically show all
+    final selectedIsOutlier =
+        selectedNeighborhood != null &&
+        clusterResult.outlierIds.contains(selectedNeighborhood.id);
+    final effectiveFocusCluster =
+        clusterResult.hasOutliers && _focusMainCluster && !selectedIsOutlier;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -85,7 +101,7 @@ class _InteractiveMapPanelState extends State<InteractiveMapPanel> {
                     InteractiveViewer(
                       transformationController: _transformationController,
                       minScale: 0.85,
-                      maxScale: 2.8,
+                      maxScale: 3.2,
                       boundaryMargin: const EdgeInsets.all(40),
                       child: LayoutBuilder(
                         builder: (context, constraints) {
@@ -95,32 +111,84 @@ class _InteractiveMapPanelState extends State<InteractiveMapPanel> {
                               constraints.maxHeight,
                             ),
                             state: widget.state,
+                            boundsNeighborhoods: effectiveFocusCluster
+                                ? clusterResult.coreNeighborhoods
+                                : widget.state.neighborhoods,
+                            visibleNeighborhoods: effectiveFocusCluster
+                                ? clusterResult.coreNeighborhoods
+                                : widget.state.neighborhoods,
                             onNeighborhoodTap: widget.onNeighborhoodTap,
                           );
                         },
                       ),
                     ),
+                    // Map Toolbar Controls (Zoom Reset + Cluster/All Toggle when outliers exist)
                     Positioned(
                       top: 10,
                       left: 10,
-                      child: Material(
-                        color: AppColor.surface.withValues(alpha: 0.92),
-                        borderRadius: BorderRadius.circular(8),
-                        child: InkWell(
-                          onTap: _resetZoom,
-                          borderRadius: BorderRadius.circular(8),
-                          child: const Tooltip(
-                            message: AppStrings.resetMapView,
-                            child: Padding(
-                              padding: EdgeInsets.all(7),
-                              child: Icon(
-                                Icons.center_focus_strong_rounded,
-                                size: 18,
-                                color: AppColor.textSecondary,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (clusterResult.hasOutliers) ...[
+                            Material(
+                              color: AppColor.surface.withValues(alpha: 0.94),
+                              borderRadius: BorderRadius.circular(8),
+                              child: InkWell(
+                                onTap: _toggleClusterFocus,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 7,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        effectiveFocusCluster
+                                            ? Icons.zoom_out_map_rounded
+                                            : Icons.filter_center_focus_rounded,
+                                        size: 16,
+                                        color: AppColor.primaryDark,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        effectiveFocusCluster
+                                            ? AppStrings.showAllNeighborhoods
+                                            : AppStrings.focusMainCluster,
+                                        style: context.textTheme.bodySmall
+                                            ?.copyWith(
+                                              color: AppColor.primaryDark,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          Material(
+                            color: AppColor.surface.withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(8),
+                            child: InkWell(
+                              onTap: _resetZoom,
+                              borderRadius: BorderRadius.circular(8),
+                              child: const Tooltip(
+                                message: AppStrings.resetMapView,
+                                child: Padding(
+                                  padding: EdgeInsets.all(7),
+                                  child: Icon(
+                                    Icons.center_focus_strong_rounded,
+                                    size: 18,
+                                    color: AppColor.textSecondary,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ],
@@ -141,7 +209,7 @@ class _InteractiveMapPanelState extends State<InteractiveMapPanel> {
           const Divider(),
           const SizedBox(height: 12),
 
-          // Selected Neighborhood Action Bar (matches PDF Page 6 footer)
+          // Simplified Selected Neighborhood Action Bar
           _SelectedNeighborhoodBar(
             neighborhood: selectedNeighborhood,
             incident: selectedIncident,
@@ -151,6 +219,65 @@ class _InteractiveMapPanelState extends State<InteractiveMapPanel> {
       ),
     );
   }
+}
+
+class _ClusterAnalysis {
+  const _ClusterAnalysis({
+    required this.coreNeighborhoods,
+    required this.outlierIds,
+  });
+
+  final List<NeighborhoodModel> coreNeighborhoods;
+  final Set<String> outlierIds;
+
+  bool get hasOutliers => outlierIds.isNotEmpty;
+}
+
+/// Detects distant geographic outliers (e.g. Al-Shihr vs Mukalla cluster) so the
+/// map can fit-bounds cleanly onto the main urban cluster while preserving 100%
+/// truthful linear geographic distances.
+_ClusterAnalysis _analyzeGeographicCluster(List<NeighborhoodModel> items) {
+  if (items.length < 4) {
+    return _ClusterAnalysis(coreNeighborhoods: items, outlierIds: const {});
+  }
+
+  final sortedLats = items.map((e) => e.lat).toList()..sort();
+  final sortedLngs = items.map((e) => e.lng).toList()..sort();
+  final medLat = sortedLats[sortedLats.length ~/ 2];
+  final medLng = sortedLngs[sortedLngs.length ~/ 2];
+  final cosLat = math.cos(medLat * math.pi / 180.0).abs().clamp(0.1, 1.0);
+
+  double geoDist(NeighborhoodModel nb) {
+    final dLat = nb.lat - medLat;
+    final dLng = (nb.lng - medLng) * cosLat;
+    return math.sqrt(dLat * dLat + dLng * dLng);
+  }
+
+  final distances = items.map(geoDist).toList();
+  final sortedDist = List<double>.from(distances)..sort();
+  final medDist = sortedDist[sortedDist.length ~/ 2];
+  if (medDist < 1e-6) {
+    return _ClusterAnalysis(coreNeighborhoods: items, outlierIds: const {});
+  }
+
+  // Flag neighborhoods more than 3.5x the median distance from center as outliers
+  final threshold = medDist * 3.5;
+  final core = <NeighborhoodModel>[];
+  final outliers = <String>{};
+
+  for (var i = 0; i < items.length; i++) {
+    if (distances[i] > threshold) {
+      outliers.add(items[i].id);
+    } else {
+      core.add(items[i]);
+    }
+  }
+
+  if (core.length < 2 || outliers.isEmpty) {
+    return _ClusterAnalysis(coreNeighborhoods: items, outlierIds: const {});
+  }
+
+  return _ClusterAnalysis(coreNeighborhoods: core, outlierIds: outliers);
 }
 
 class _MapLegend extends StatelessWidget {
@@ -216,30 +343,48 @@ class _GeoNeighborhoodCanvas extends StatelessWidget {
   const _GeoNeighborhoodCanvas({
     required this.size,
     required this.state,
+    required this.boundsNeighborhoods,
+    required this.visibleNeighborhoods,
     required this.onNeighborhoodTap,
   });
 
   final Size size;
   final DashboardState state;
+  final List<NeighborhoodModel> boundsNeighborhoods;
+  final List<NeighborhoodModel> visibleNeighborhoods;
   final ValueChanged<NeighborhoodModel> onNeighborhoodTap;
 
   @override
   Widget build(BuildContext context) {
-    final neighborhoods = state.neighborhoods;
-    final projected = _projectPoints(neighborhoods, size);
+    final projected = _projectHonestLinear(
+      visibleNeighborhoods,
+      boundsNeighborhoods,
+      size,
+    );
 
     // Draw quiet markers underneath active incident markers
-    final orderedIndices = List<int>.generate(neighborhoods.length, (i) => i)
-      ..sort((a, b) {
-        final incA = state.incidentForNeighborhood(neighborhoods[a].id);
-        final incB = state.incidentForNeighborhood(neighborhoods[b].id);
-        final activeA = incA != null ? 1 : 0;
-        final activeB = incB != null ? 1 : 0;
-        if (activeA != activeB) return activeA.compareTo(activeB);
-        final selA = neighborhoods[a].id == state.selectedNeighborhoodId ? 1 : 0;
-        final selB = neighborhoods[b].id == state.selectedNeighborhoodId ? 1 : 0;
-        return selA.compareTo(selB);
-      });
+    final orderedIndices =
+        List<int>.generate(visibleNeighborhoods.length, (i) => i)
+          ..sort((a, b) {
+            final incA = state.incidentForNeighborhood(
+              visibleNeighborhoods[a].id,
+            );
+            final incB = state.incidentForNeighborhood(
+              visibleNeighborhoods[b].id,
+            );
+            final activeA = incA != null ? 1 : 0;
+            final activeB = incB != null ? 1 : 0;
+            if (activeA != activeB) return activeA.compareTo(activeB);
+            final selA =
+                visibleNeighborhoods[a].id == state.selectedNeighborhoodId
+                ? 1
+                : 0;
+            final selB =
+                visibleNeighborhoods[b].id == state.selectedNeighborhoodId
+                ? 1
+                : 0;
+            return selA.compareTo(selB);
+          });
 
     return SizedBox(
       width: size.width,
@@ -253,7 +398,7 @@ class _GeoNeighborhoodCanvas extends StatelessWidget {
           for (final index in orderedIndices)
             _buildMarker(
               context: context,
-              neighborhood: neighborhoods[index],
+              neighborhood: visibleNeighborhoods[index],
               position: projected[index],
             ),
         ],
@@ -273,10 +418,12 @@ class _GeoNeighborhoodCanvas extends StatelessWidget {
     final markerDiameter = !hasActiveIncident
         ? (isSelected ? 18.0 : 12.0)
         : incident.urgentHealth
-        ? 64.0
-        : (incident.priorityScore >= 70 ? 74.0 : 60.0);
+        ? 62.0
+        : (incident.priorityScore >= 70 ? 70.0 : 58.0);
 
-    final outerDiameter = hasActiveIncident ? markerDiameter + 12 : markerDiameter;
+    final outerDiameter = hasActiveIncident
+        ? markerDiameter + 12
+        : markerDiameter;
     final totalWidth = math.max(outerDiameter + 44, 118.0);
 
     return Positioned(
@@ -328,7 +475,7 @@ class _GeoNeighborhoodCanvas extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: AppColor.surface.withValues(alpha: 0.85),
+                      color: AppColor.surface.withValues(alpha: 0.88),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -352,16 +499,23 @@ class _GeoNeighborhoodCanvas extends StatelessWidget {
   }
 
   String _tooltipFor(NeighborhoodModel nb, IncidentModel? incident) {
-    final coords =
-        '(${nb.lat.toStringAsFixed(4)}, ${nb.lng.toStringAsFixed(4)})';
     if (incident == null) {
-      return '${nb.name}\n${AppStrings.noActiveIncidentInNeighborhood}\n$coords';
+      return '${nb.name}\n${AppStrings.noActiveIncidentInNeighborhood}';
     }
-    return '${nb.name} · ${incident.priorityLevel.arabicLabel} (${incident.priorityScore.toStringAsFixed(1)})\n'
-        '${incident.state.arabicLabel} · ${AppStrings.devicesCountLabel(incident.distinctDevices)}\n$coords';
+    final durationPart = incident.maxDurationDays > 0
+        ? ' · ${AppStrings.daysDurationLabel(incident.maxDurationDays)}'
+        : '';
+    return '${nb.name} · ${incident.state.arabicLabel}\n'
+        '${incident.displayIssueType} · ${AppStrings.devicesCountLabel(incident.distinctDevices)}$durationPart';
   }
 
-  List<Offset> _projectPoints(List<NeighborhoodModel> items, Size canvasSize) {
+  /// Honest linear geographic projection preserving true aspect ratio via
+  /// cos(midLat) scaling so distances and compass directions are never distorted.
+  List<Offset> _projectHonestLinear(
+    List<NeighborhoodModel> items,
+    List<NeighborhoodModel> boundsItems,
+    Size canvasSize,
+  ) {
     if (items.isEmpty) return const [];
 
     const horizontalPad = 78.0;
@@ -369,79 +523,54 @@ class _GeoNeighborhoodCanvas extends StatelessWidget {
     final usableW = math.max(canvasSize.width - horizontalPad * 2, 40.0);
     final usableH = math.max(canvasSize.height - verticalPad * 2, 40.0);
 
-    if (items.length == 1) {
-      return [Offset(canvasSize.width / 2, canvasSize.height / 2)];
+    if (items.length == 1 || boundsItems.isEmpty) {
+      return List<Offset>.filled(
+        items.length,
+        Offset(canvasSize.width / 2, canvasSize.height / 2),
+      );
     }
 
-    var minLat = items.first.lat;
-    var maxLat = items.first.lat;
-    var minLng = items.first.lng;
-    var maxLng = items.first.lng;
+    var minLat = boundsItems.first.lat;
+    var maxLat = boundsItems.first.lat;
+    var minLng = boundsItems.first.lng;
+    var maxLng = boundsItems.first.lng;
 
-    for (final nb in items) {
+    for (final nb in boundsItems) {
       if (nb.lat < minLat) minLat = nb.lat;
       if (nb.lat > maxLat) maxLat = nb.lat;
       if (nb.lng < minLng) minLng = nb.lng;
       if (nb.lng > maxLng) maxLng = nb.lng;
     }
 
-    final latSpan = (maxLat - minLat).abs();
-    final lngSpan = (maxLng - minLng).abs();
+    final midLat = (minLat + maxLat) / 2.0;
+    final cosLat = math.cos(midLat * math.pi / 180.0).abs().clamp(0.1, 1.0);
 
-    final linearX = List<double>.generate(items.length, (i) {
-      return lngSpan < 0.00001
-          ? (i + 1) / (items.length + 1)
-          : (items[i].lng - minLng) / lngSpan;
-    });
-    final linearY = List<double>.generate(items.length, (i) {
-      return latSpan < 0.00001
-          ? 0.5
-          : 1.0 - ((items[i].lat - minLat) / latSpan);
-    });
+    final geoW = (maxLng - minLng).abs() * cosLat;
+    final geoH = (maxLat - minLat).abs();
 
-    final useClusterSpreadX = _isClusteredAxis(linearX);
-    final useClusterSpreadY = _isClusteredAxis(linearY);
+    if (geoW < 1e-6 && geoH < 1e-6) {
+      return List<Offset>.filled(
+        items.length,
+        Offset(canvasSize.width / 2, canvasSize.height / 2),
+      );
+    }
 
-    final rankX = useClusterSpreadX ? _computeRankNorms(linearX) : null;
-    final rankY = useClusterSpreadY ? _computeRankNorms(linearY) : null;
+    // Uniform scale preserving aspect ratio while centering inside usable canvas
+    final scaleX = geoW > 1e-6 ? usableW / geoW : double.infinity;
+    final scaleY = geoH > 1e-6 ? usableH / geoH : double.infinity;
+    final scale = math.min(scaleX, scaleY);
+
+    final drawnW = geoW * scale;
+    final drawnH = geoH * scale;
+    final offsetX = horizontalPad + (usableW - drawnW) / 2;
+    final offsetY = verticalPad + (usableH - drawnH) / 2;
 
     return List<Offset>.generate(items.length, (i) {
-      final normX = rankX != null
-          ? (0.35 * linearX[i] + 0.65 * rankX[i])
-          : linearX[i];
-      final normY = rankY != null
-          ? (0.35 * linearY[i] + 0.65 * rankY[i])
-          : linearY[i];
-
-      return Offset(
-        horizontalPad + normX * usableW,
-        verticalPad + normY * usableH,
-      );
+      final nb = items[i];
+      final x = offsetX + ((nb.lng - minLng) * cosLat) * scale;
+      final y = offsetY + (maxLat - nb.lat) * scale;
+      return Offset(x, y);
     });
-  }
-
-  bool _isClusteredAxis(List<double> norms) {
-    if (norms.length < 4) return false;
-    final sorted = List<double>.from(norms)..sort();
-    final majorityCount = (sorted.length ~/ 2) + 1;
-    for (var i = 0; i <= sorted.length - majorityCount; i++) {
-      if (sorted[i + majorityCount - 1] - sorted[i] < 0.30) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  List<double> _computeRankNorms(List<double> values) {
-    final n = values.length;
-    if (n <= 1) return List<double>.filled(n, 0.5);
-    final indices = List<int>.generate(n, (i) => i)
-      ..sort((a, b) => values[a].compareTo(values[b]));
-    final ranks = List<double>.filled(n, 0.0);
-    for (var rank = 0; rank < n; rank++) {
-      ranks[indices[rank]] = rank / (n - 1);
-    }
-    return ranks;
   }
 }
 
@@ -511,7 +640,7 @@ class _IncidentBubbleMarker extends StatelessWidget {
                     style: context.textTheme.titleSmall?.copyWith(
                       color: AppColor.onPrimary,
                       fontWeight: FontWeight.w800,
-                      fontSize: diameter >= 70 ? 15.5 : 13.5,
+                      fontSize: diameter >= 68 ? 15 : 13.5,
                     ),
                   ),
           ),
@@ -563,27 +692,18 @@ class _SelectedNeighborhoodBar extends StatelessWidget {
             Text(
               displayName,
               style: context.textTheme.titleMedium?.copyWith(
-                fontSize: 16,
+                fontSize: 15.5,
                 fontWeight: FontWeight.w800,
               ),
             ),
             if (incident != null) ...[
-              Text(
-                incident!.priorityScore.toStringAsFixed(1),
-                style: context.textTheme.titleMedium?.copyWith(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: AppColor.textPrimary,
+              if (incident!.urgentHealth)
+                const StatusBadge(
+                  label: AppStrings.priorityUrgentHealth,
+                  backgroundColor: AppColor.urgentHealth,
+                  foregroundColor: AppColor.onPrimary,
+                  icon: Icons.warning_amber_rounded,
                 ),
-              ),
-              StatusBadge(
-                label: incident!.priorityLevel.arabicLabel,
-                backgroundColor: incident!.priorityLevel.color,
-                foregroundColor: AppColor.onPrimary,
-                icon: incident!.urgentHealth
-                    ? Icons.warning_amber_rounded
-                    : null,
-              ),
               StatusBadge(
                 label: incident!.state.arabicLabel,
                 backgroundColor: incident!.state.color,
@@ -611,7 +731,6 @@ class _SelectedNeighborhoodBar extends StatelessWidget {
 class _StylizedCityMapPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    // Waterway curve inspired by Qatrah PDF map backdrop
     final riverPaint = Paint()
       ..color = AppColor.mapWaterway
       ..style = PaintingStyle.stroke
@@ -639,7 +758,6 @@ class _StylizedCityMapPainter extends CustomPainter {
       );
     canvas.drawPath(riverPath, riverPaint);
 
-    // Subtle urban arterial roads
     final roadPaint = Paint()
       ..color = AppColor.mapRoad.withValues(alpha: 0.88)
       ..style = PaintingStyle.stroke

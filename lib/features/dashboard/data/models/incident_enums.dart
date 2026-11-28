@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:gtra_dashboard/core/constants/app_strings.dart';
 import 'package:gtra_dashboard/core/themes/app_color.dart';
 
-// TODO: Confirm enum integer ordering with backend dev.
 enum IncidentState {
   newIncident(0, 'New', AppStrings.stateNew, AppColor.stateNew),
   confirmed(1, 'Confirmed', AppStrings.stateConfirmed, AppColor.stateConfirmed),
@@ -67,7 +66,6 @@ enum IncidentState {
   }
 }
 
-// TODO: Confirm enum integer ordering with backend dev.
 enum IssueType {
   outage(0, AppStrings.outageIssue),
   contamination(1, AppStrings.contaminationIssue);
@@ -141,7 +139,6 @@ enum PriorityLevel {
 enum DashboardFilter {
   all(AppStrings.filterAll),
   urgentHealth(AppStrings.filterUrgentHealth),
-  confirmed(AppStrings.filterConfirmed),
   inProgress(AppStrings.filterInProgress);
 
   const DashboardFilter(this.label);

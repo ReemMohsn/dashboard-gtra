@@ -11,13 +11,11 @@ class IncidentModel {
     required this.priorityScore,
     required this.priorityLevel,
     required this.urgentHealth,
-    required this.escalating,
     required this.isRepeat,
     required this.state,
     required this.distinctDevices,
     required this.maxDurationDays,
     this.reportCount,
-    this.confidenceLabel,
     this.issueType = IssueType.outage,
     this.rank,
     this.explanation,
@@ -34,13 +32,11 @@ class IncidentModel {
   final double priorityScore;
   final PriorityLevel priorityLevel;
   final bool urgentHealth;
-  final bool escalating;
   final bool isRepeat;
   final IncidentState state;
   final int distinctDevices;
   final double maxDurationDays;
   final int? reportCount;
-  final String? confidenceLabel;
   final IssueType issueType;
   final int? rank;
   final String? explanation;
@@ -57,28 +53,18 @@ class IncidentModel {
     return AppStrings.outageIssue;
   }
 
-  String get resolvedConfidenceLabel {
-    if (confidenceLabel != null && confidenceLabel!.trim().isNotEmpty) {
-      return _localizeConfidence(confidenceLabel!.trim());
-    }
-    if (distinctDevices >= 6) return AppStrings.confidenceHigh;
-    if (distinctDevices >= 3) return AppStrings.confidenceMedium;
-    return AppStrings.confidenceLow;
-  }
-
-  /// Deterministic Golden Rule priority comparator:
-  /// 1. UrgentHealth incidents ALWAYS top the priority list.
-  /// 2. Higher priorityScore comes next.
-  /// 3. Tie-breakers: Escalating -> DistinctDevices -> MaxDurationDays.
+  /// Trusts backend-assigned deterministic `rank` as the single source of truth.
+  /// Falls back to Golden Rule (`urgentHealth` -> `priorityScore`) only when
+  /// backend `rank` is absent (e.g. demo or legacy payloads).
   static int compareByPriority(IncidentModel a, IncidentModel b) {
+    if (a.rank != null && b.rank != null) {
+      return a.rank!.compareTo(b.rank!);
+    }
     if (a.urgentHealth != b.urgentHealth) {
       return a.urgentHealth ? -1 : 1;
     }
     final scoreCompare = b.priorityScore.compareTo(a.priorityScore);
     if (scoreCompare != 0) return scoreCompare;
-    if (a.escalating != b.escalating) {
-      return a.escalating ? -1 : 1;
-    }
     final devicesCompare = b.distinctDevices.compareTo(a.distinctDevices);
     if (devicesCompare != 0) return devicesCompare;
     return b.maxDurationDays.compareTo(a.maxDurationDays);
@@ -91,13 +77,11 @@ class IncidentModel {
     double? priorityScore,
     PriorityLevel? priorityLevel,
     bool? urgentHealth,
-    bool? escalating,
     bool? isRepeat,
     IncidentState? state,
     int? distinctDevices,
     double? maxDurationDays,
     int? reportCount,
-    String? confidenceLabel,
     IssueType? issueType,
     int? rank,
     String? explanation,
@@ -122,13 +106,11 @@ class IncidentModel {
             priorityScore: nextScore,
           ),
       urgentHealth: nextUrgentHealth,
-      escalating: escalating ?? this.escalating,
       isRepeat: isRepeat ?? this.isRepeat,
       state: state ?? this.state,
       distinctDevices: distinctDevices ?? this.distinctDevices,
       maxDurationDays: maxDurationDays ?? this.maxDurationDays,
       reportCount: reportCount ?? this.reportCount,
-      confidenceLabel: confidenceLabel ?? this.confidenceLabel,
       issueType: issueType ?? this.issueType,
       rank: rank ?? this.rank,
       explanation: explanation ?? this.explanation,
@@ -147,8 +129,13 @@ class IncidentModel {
         ? Map<String, dynamic>.from(neighborhoodObj)
         : null;
 
-    final id = (json['id'] ?? json['Id'] ?? json['incidentId'] ?? json['IncidentId'] ?? '')
-        .toString();
+    final id =
+        (json['id'] ??
+                json['Id'] ??
+                json['incidentId'] ??
+                json['IncidentId'] ??
+                '')
+            .toString();
     final neighborhoodId =
         (json['neighborhoodId'] ??
                 json['NeighborhoodId'] ??
@@ -185,12 +172,6 @@ class IncidentModel {
           json['isUrgentHealth'] ??
           json['IsUrgentHealth'],
     );
-    final escalating = _parseBool(
-      json['Escalating'] ??
-          json['escalating'] ??
-          json['isEscalating'] ??
-          json['IsEscalating'],
-    );
     final isRepeat = _parseBool(
       json['IsRepeat'] ?? json['isRepeat'] ?? json['repeat'] ?? json['Repeat'],
     );
@@ -225,19 +206,17 @@ class IncidentModel {
     final reports = rawReports is List
         ? rawReports
               .whereType<Map>()
-              .map((item) => ReportModel.fromJson(Map<String, dynamic>.from(item)))
+              .map(
+                (item) => ReportModel.fromJson(Map<String, dynamic>.from(item)),
+              )
               .toList(growable: false)
         : const <ReportModel>[];
 
-    final rawConfidence =
-        (json['confidence'] ??
-                json['Confidence'] ??
-                json['confidenceLevel'] ??
-                json['ConfidenceLevel'])
-            ?.toString();
-
     final rawLevel =
-        (json['priorityLevel'] ?? json['PriorityLevel'] ?? json['severity'] ?? json['Severity'])
+        (json['priorityLevel'] ??
+                json['PriorityLevel'] ??
+                json['severity'] ??
+                json['Severity'])
             ?.toString();
 
     final rawPrediction = json['prediction'] ?? json['Prediction'];
@@ -259,7 +238,6 @@ class IncidentModel {
         rawLevel: rawLevel,
       ),
       urgentHealth: urgentHealth,
-      escalating: escalating,
       isRepeat: isRepeat,
       state: state,
       distinctDevices: distinctDevices,
@@ -267,7 +245,6 @@ class IncidentModel {
       reportCount: _parseInt(
         json['reportCount'] ?? json['ReportCount'] ?? json['reportsCount'],
       ),
-      confidenceLabel: rawConfidence,
       issueType: IssueType.fromApi(
         json['issueType'] ??
             json['IssueType'] ??
@@ -287,7 +264,7 @@ class IncidentModel {
         json['explanationFromModel'] ?? json['ExplanationFromModel'],
       ),
       embeddedPrediction: embeddedPrediction,
-      lastReportAt: _parseDate(
+      lastReportAt: ReportModel.parseApiUtcDate(
         json['lastReportAt'] ??
             json['LastReportAt'] ??
             json['latestReportAt'] ??
@@ -295,22 +272,11 @@ class IncidentModel {
             json['updatedAt'] ??
             json['UpdatedAt'],
       ),
-      updatedAt: _parseDate(json['updatedAt'] ?? json['UpdatedAt']),
+      updatedAt: ReportModel.parseApiUtcDate(
+        json['updatedAt'] ?? json['UpdatedAt'],
+      ),
       reports: reports,
     );
-  }
-
-  static String _localizeConfidence(String value) {
-    switch (value.toLowerCase()) {
-      case 'high':
-        return AppStrings.confidenceHigh;
-      case 'medium':
-        return AppStrings.confidenceMedium;
-      case 'low':
-        return AppStrings.confidenceLow;
-      default:
-        return value;
-    }
   }
 
   static bool _parseBool(Object? value) {
@@ -333,11 +299,6 @@ class IncidentModel {
   static double? _parseDouble(Object? value) {
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value);
-    return null;
-  }
-
-  static DateTime? _parseDate(Object? value) {
-    if (value is String && value.isNotEmpty) return DateTime.tryParse(value);
     return null;
   }
 }

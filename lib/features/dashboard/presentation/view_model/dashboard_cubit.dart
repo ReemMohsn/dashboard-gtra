@@ -32,10 +32,8 @@ class DashboardCubit extends Cubit<DashboardState> {
         _repository.getIncidents(),
       ]);
 
-      final neighborhoodsResponse =
-          results[0] as dynamic;
-      final incidentsResponse =
-          results[1] as dynamic;
+      final neighborhoodsResponse = results[0] as dynamic;
+      final incidentsResponse = results[1] as dynamic;
 
       final neighborhoods =
           (neighborhoodsResponse.data as List<NeighborhoodModel>?) ??
@@ -59,6 +57,8 @@ class DashboardCubit extends Cubit<DashboardState> {
           state.selectedNeighborhoodId ??
           (neighborhoods.isNotEmpty ? neighborhoods.first.id : null);
 
+      final embeddedPrediction = nextIncident?.embeddedPrediction;
+
       emit(
         state.copyWith(
           dashboardStatus: DashboardRequestStatus.success,
@@ -68,6 +68,14 @@ class DashboardCubit extends Cubit<DashboardState> {
           clearSelectedIncident: nextIncident == null,
           selectedNeighborhoodId: nextNeighborhoodId,
           clearSelectedNeighborhood: nextNeighborhoodId == null,
+          selectedIncidentDetail: nextIncident,
+          clearSelectedIncidentDetail: nextIncident == null,
+          prediction: embeddedPrediction,
+          clearPrediction: embeddedPrediction == null,
+          predictionStatus: embeddedPrediction != null
+              ? DashboardRequestStatus.success
+              : DashboardRequestStatus.initial,
+          isDetailsOpen: state.isDetailsOpen && nextIncident != null,
           isDemoMode: false,
           lastUpdatedAt: DateTime.now(),
           clearDashboardErrorMessage: true,
@@ -108,6 +116,11 @@ class DashboardCubit extends Cubit<DashboardState> {
         incidents: incidents,
         selectedIncidentId: defaultSelected?.id,
         selectedNeighborhoodId: defaultSelected?.neighborhoodId,
+        selectedIncidentDetail: defaultSelected,
+        prediction: defaultSelected?.embeddedPrediction,
+        predictionStatus: defaultSelected?.embeddedPrediction != null
+            ? DashboardRequestStatus.success
+            : DashboardRequestStatus.initial,
         isDemoMode: true,
         isDetailsOpen: false,
         lastUpdatedAt: DateTime.now(),
@@ -196,7 +209,7 @@ class DashboardCubit extends Cubit<DashboardState> {
   Future<void> retryPrediction() async {
     final incident = state.selectedIncident;
     if (incident == null) return;
-    await _fetchPrediction(incident.neighborhoodId, incident.id);
+    await _fetchPrediction(incident.neighborhoodId, incident.id, force: true);
   }
 
   Future<void> updateIncidentState(IncidentState newState) async {
@@ -214,15 +227,12 @@ class DashboardCubit extends Cubit<DashboardState> {
     );
 
     if (state.isDemoMode) {
-      await Future<void>.delayed(const Duration(milliseconds: 280));
+      await Future<void>.delayed(const Duration(milliseconds: 220));
       final updatedIncident = incident.copyWith(
         state: newState,
         updatedAt: DateTime.now(),
       );
-      _applyUpdatedIncident(
-        updatedIncident,
-        message: AppStrings.stateUpdatedSuccess,
-      );
+      _applyUpdatedIncident(updatedIncident);
       return;
     }
 
@@ -243,10 +253,7 @@ class DashboardCubit extends Cubit<DashboardState> {
             )
           : incident.copyWith(state: newState, updatedAt: DateTime.now());
 
-      _applyUpdatedIncident(
-        mergedIncident,
-        message: AppStrings.stateUpdatedSuccess,
-      );
+      _applyUpdatedIncident(mergedIncident);
     } on ServerException catch (error) {
       emit(
         state.copyWith(
@@ -280,10 +287,14 @@ class DashboardCubit extends Cubit<DashboardState> {
   }
 
   Future<void> _loadDetailsAndPrediction(IncidentModel incident) async {
-    await Future.wait([
-      _fetchIncidentDetails(incident),
-      _fetchPrediction(incident.neighborhoodId, incident.id),
-    ]);
+    final tasks = <Future<void>>[_fetchIncidentDetails(incident)];
+
+    // Avoid duplicate GET /api/predictions/{id} when RankedIncident already embeds it
+    if (incident.embeddedPrediction == null) {
+      tasks.add(_fetchPrediction(incident.neighborhoodId, incident.id));
+    }
+
+    await Future.wait(tasks);
   }
 
   Future<void> _fetchIncidentDetails(IncidentModel incident) async {
@@ -295,7 +306,7 @@ class DashboardCubit extends Cubit<DashboardState> {
     );
 
     if (state.isDemoMode) {
-      await Future<void>.delayed(const Duration(milliseconds: 160));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
       if (state.selectedIncidentId != incident.id) return;
       emit(
         state.copyWith(
@@ -336,18 +347,17 @@ class DashboardCubit extends Cubit<DashboardState> {
           .map((item) => item.id == merged.id ? merged : item)
           .toList(growable: false);
 
-      final shouldSeedPrediction =
-          state.prediction == null && merged.embeddedPrediction != null;
+      final nextPrediction = merged.embeddedPrediction ?? state.prediction;
 
       emit(
         state.copyWith(
           detailsStatus: DashboardRequestStatus.success,
           selectedIncidentDetail: merged,
           incidents: updatedList,
-          prediction: shouldSeedPrediction ? merged.embeddedPrediction : null,
-          predictionStatus: shouldSeedPrediction
+          prediction: nextPrediction,
+          predictionStatus: nextPrediction != null
               ? DashboardRequestStatus.success
-              : null,
+              : state.predictionStatus,
           clearDetailsErrorMessage: true,
         ),
       );
@@ -372,8 +382,9 @@ class DashboardCubit extends Cubit<DashboardState> {
 
   Future<void> _fetchPrediction(
     String neighborhoodId,
-    String expectedIncidentId,
-  ) async {
+    String expectedIncidentId, {
+    bool force = false,
+  }) async {
     if (neighborhoodId.isEmpty) {
       emit(
         state.copyWith(
@@ -386,6 +397,7 @@ class DashboardCubit extends Cubit<DashboardState> {
     }
 
     final hasSeededPrediction =
+        !force &&
         state.prediction != null &&
         state.prediction!.neighborhoodId == neighborhoodId;
 
@@ -399,7 +411,7 @@ class DashboardCubit extends Cubit<DashboardState> {
     }
 
     if (state.isDemoMode) {
-      await Future<void>.delayed(const Duration(milliseconds: 240));
+      await Future<void>.delayed(const Duration(milliseconds: 180));
       if (state.selectedIncidentId != expectedIncidentId) return;
       final demoPrediction =
           DemoDashboardData.predictionsByNeighborhood[neighborhoodId];
@@ -428,7 +440,8 @@ class DashboardCubit extends Cubit<DashboardState> {
       if (state.selectedIncidentId != expectedIncidentId) return;
 
       if (response.data == null) {
-        if (state.prediction != null &&
+        if (!force &&
+            state.prediction != null &&
             state.prediction!.neighborhoodId == neighborhoodId) {
           emit(
             state.copyWith(
@@ -457,7 +470,8 @@ class DashboardCubit extends Cubit<DashboardState> {
       );
     } on ServerException catch (error) {
       if (state.selectedIncidentId != expectedIncidentId) return;
-      if (state.prediction != null &&
+      if (!force &&
+          state.prediction != null &&
           state.prediction!.neighborhoodId == neighborhoodId) {
         emit(
           state.copyWith(
@@ -476,7 +490,8 @@ class DashboardCubit extends Cubit<DashboardState> {
       );
     } catch (_) {
       if (state.selectedIncidentId != expectedIncidentId) return;
-      if (state.prediction != null &&
+      if (!force &&
+          state.prediction != null &&
           state.prediction!.neighborhoodId == neighborhoodId) {
         emit(
           state.copyWith(
@@ -496,10 +511,39 @@ class DashboardCubit extends Cubit<DashboardState> {
     }
   }
 
-  void _applyUpdatedIncident(
-    IncidentModel updated, {
-    required String message,
-  }) {
+  void _applyUpdatedIncident(IncidentModel updated) {
+    // Remove resolved/expired incidents immediately so list, map & quiet count stay consistent
+    if (!updated.state.isActive) {
+      final remaining = state.incidents
+          .where((item) => item.id != updated.id)
+          .toList(growable: false);
+      final nextSelected = remaining.isNotEmpty ? remaining.first : null;
+
+      emit(
+        state.copyWith(
+          incidents: remaining,
+          selectedIncidentId: nextSelected?.id,
+          clearSelectedIncident: nextSelected == null,
+          selectedNeighborhoodId: nextSelected?.neighborhoodId,
+          clearSelectedNeighborhood: nextSelected == null,
+          selectedIncidentDetail: nextSelected,
+          clearSelectedIncidentDetail: nextSelected == null,
+          prediction: nextSelected?.embeddedPrediction,
+          clearPrediction: nextSelected?.embeddedPrediction == null,
+          predictionStatus: nextSelected?.embeddedPrediction != null
+              ? DashboardRequestStatus.success
+              : DashboardRequestStatus.initial,
+          isDetailsOpen: false,
+          isUpdatingState: false,
+          clearUpdatingTargetState: true,
+          stateUpdateSuccessMessage: AppStrings.stateResolvedRemovedSuccess,
+          clearStateUpdateErrorMessage: true,
+          lastUpdatedAt: DateTime.now(),
+        ),
+      );
+      return;
+    }
+
     final updatedList =
         state.incidents
             .map((item) => item.id == updated.id ? updated : item)
@@ -512,7 +556,7 @@ class DashboardCubit extends Cubit<DashboardState> {
         selectedIncidentDetail: updated,
         isUpdatingState: false,
         clearUpdatingTargetState: true,
-        stateUpdateSuccessMessage: message,
+        stateUpdateSuccessMessage: AppStrings.stateUpdatedSuccess,
         clearStateUpdateErrorMessage: true,
         lastUpdatedAt: DateTime.now(),
       ),
@@ -527,15 +571,18 @@ class DashboardCubit extends Cubit<DashboardState> {
       for (final nb in neighborhoods) nb.id: nb.name,
     };
 
-    final enriched = rawIncidents.map((incident) {
-      final resolvedName = neighborhoodNames[incident.neighborhoodId];
-      if ((incident.neighborhoodName.isEmpty ||
-              incident.neighborhoodName == 'حي غير محدد') &&
-          resolvedName != null) {
-        return incident.copyWith(neighborhoodName: resolvedName);
-      }
-      return incident;
-    }).toList();
+    final enriched = rawIncidents
+        .where((incident) => incident.state.isActive)
+        .map((incident) {
+          final resolvedName = neighborhoodNames[incident.neighborhoodId];
+          if ((incident.neighborhoodName.isEmpty ||
+                  incident.neighborhoodName == 'حي غير محدد') &&
+              resolvedName != null) {
+            return incident.copyWith(neighborhoodName: resolvedName);
+          }
+          return incident;
+        })
+        .toList();
 
     enriched.sort(IncidentModel.compareByPriority);
     return enriched;

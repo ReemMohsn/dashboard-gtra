@@ -146,6 +146,7 @@ class DashboardView extends StatelessWidget {
           if (state.isDetailsOpen)
             IncidentDetailsPanel(
               state: state,
+              shrinkWrap: true,
               onBackToMap: cubit.closeDetails,
               onRetryDetails: cubit.retryIncidentDetails,
               onRetryPrediction: cubit.retryPrediction,

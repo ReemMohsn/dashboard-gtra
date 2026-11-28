@@ -25,7 +25,7 @@ class DashboardTopBar extends StatelessWidget {
     final isMobile = context.isMobile;
 
     return Container(
-      height: 68,
+      height: 64,
       decoration: const BoxDecoration(
         color: AppColor.surface,
         border: Border(bottom: BorderSide(color: AppColor.border)),
@@ -39,7 +39,7 @@ class DashboardTopBar extends StatelessWidget {
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const QatrahLogo(size: 30),
+              const QatrahLogo(size: 28),
               const SizedBox(width: 10),
               Text(
                 isMobile ? AppStrings.appName : AppStrings.dashboardTitle,
@@ -50,30 +50,7 @@ class DashboardTopBar extends StatelessWidget {
               ),
             ],
           ),
-
-          if (!isMobile) ...[
-            const Spacer(),
-            // Active Navigation Tab ("الأولويات") matching PDF design
-            Container(
-              height: double.infinity,
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 18),
-              decoration: const BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: AppColor.primary, width: 2.5),
-                ),
-              ),
-              child: Text(
-                AppStrings.prioritiesTab,
-                style: context.textTheme.titleMedium?.copyWith(
-                  color: AppColor.textPrimary,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const Spacer(),
-          ] else
-            const Spacer(),
+          const Spacer(),
 
           // Status / Actions / Authority Pill (Left side in RTL)
           Row(
@@ -104,7 +81,7 @@ class DashboardTopBar extends StatelessWidget {
                         : AppStrings.refreshData,
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
               ],
               IconButton(
                 tooltip: AppStrings.refreshData,
@@ -120,9 +97,9 @@ class DashboardTopBar extends StatelessWidget {
                         color: AppColor.textSecondary,
                       ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: AppColor.surfaceSoft,
                   borderRadius: BorderRadius.circular(AppTheme.pillRadius),
@@ -132,7 +109,7 @@ class DashboardTopBar extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     CircleAvatar(
-                      radius: 13,
+                      radius: 12,
                       backgroundColor: AppColor.primarySoft,
                       child: Text(
                         AppStrings.authorityAvatarLetter,

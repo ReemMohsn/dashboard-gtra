@@ -52,20 +52,20 @@ class DashboardState {
   final String? stateUpdateSuccessMessage;
   final DateTime? lastUpdatedAt;
 
+  List<IncidentModel> get activeIncidents =>
+      incidents.where((incident) => incident.state.isActive).toList(growable: false);
+
   List<IncidentModel> get filteredIncidents {
+    final active = activeIncidents;
     switch (activeFilter) {
       case DashboardFilter.all:
-        return incidents;
+        return active;
       case DashboardFilter.urgentHealth:
-        return incidents
+        return active
             .where((incident) => incident.urgentHealth)
             .toList(growable: false);
-      case DashboardFilter.confirmed:
-        return incidents
-            .where((incident) => incident.state == IncidentState.confirmed)
-            .toList(growable: false);
       case DashboardFilter.inProgress:
-        return incidents
+        return active
             .where((incident) => incident.state == IncidentState.inProgress)
             .toList(growable: false);
     }
@@ -73,11 +73,12 @@ class DashboardState {
 
   IncidentModel? get selectedIncident {
     if (selectedIncidentDetail != null &&
-        selectedIncidentDetail!.id == selectedIncidentId) {
+        selectedIncidentDetail!.id == selectedIncidentId &&
+        selectedIncidentDetail!.state.isActive) {
       return selectedIncidentDetail;
     }
     if (selectedIncidentId != null) {
-      for (final incident in incidents) {
+      for (final incident in activeIncidents) {
         if (incident.id == selectedIncidentId) return incident;
       }
     }
@@ -99,6 +100,7 @@ class DashboardState {
   IncidentModel? incidentForNeighborhood(String neighborhoodId) {
     IncidentModel? best;
     for (final incident in incidents) {
+      if (!incident.state.isActive) continue;
       if (incident.neighborhoodId == neighborhoodId) {
         if (best == null ||
             IncidentModel.compareByPriority(incident, best) < 0) {
@@ -111,8 +113,7 @@ class DashboardState {
 
   int get quietNeighborhoodsCount {
     if (neighborhoods.isEmpty) return 0;
-    final activeNeighborhoodIds = incidents
-        .where((incident) => incident.state.isActive)
+    final activeNeighborhoodIds = activeIncidents
         .map((incident) => incident.neighborhoodId)
         .toSet();
     return neighborhoods
@@ -121,13 +122,9 @@ class DashboardState {
   }
 
   int get urgentHealthCount =>
-      incidents.where((incident) => incident.urgentHealth).length;
+      activeIncidents.where((incident) => incident.urgentHealth).length;
 
-  int get confirmedCount => incidents
-      .where((incident) => incident.state == IncidentState.confirmed)
-      .length;
-
-  int get inProgressCount => incidents
+  int get inProgressCount => activeIncidents
       .where((incident) => incident.state == IncidentState.inProgress)
       .length;
 

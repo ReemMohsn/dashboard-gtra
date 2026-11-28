@@ -56,6 +56,42 @@ abstract final class DemoDashboardData {
     ),
   ];
 
+  static final Map<String, PredictionModel> predictionsByNeighborhood = {
+    'nb-sharqiya': const PredictionModel(
+      neighborhoodId: 'nb-sharqiya',
+      cycleMean: 2.5,
+      ci90Low: 1.8,
+      ci90High: 3.2,
+      probArrival2d: 0.14,
+      probLate: 0.92,
+      abnormalDelay: true,
+      basis: '6 observations (Gradient Boosting)',
+      source: 'model',
+    ),
+    'nb-gharbiya': const PredictionModel(
+      neighborhoodId: 'nb-gharbiya',
+      cycleMean: 6.4,
+      ci90Low: 5.9,
+      ci90High: 7.1,
+      probArrival2d: 0.68,
+      probLate: 0.22,
+      abnormalDelay: false,
+      basis: '9 observations (Gradient Boosting)',
+      source: 'model',
+    ),
+    'nb-mansoura': const PredictionModel(
+      neighborhoodId: 'nb-mansoura',
+      cycleMean: 7.2,
+      ci90Low: 6.4,
+      ci90High: 8.1,
+      probArrival2d: 0.55,
+      probLate: 0.0,
+      abnormalDelay: false,
+      basis: '0 observations (Prior only)',
+      source: 'model',
+    ),
+  };
+
   static List<IncidentModel> buildIncidents() {
     final now = DateTime.now();
 
@@ -67,16 +103,17 @@ abstract final class DemoDashboardData {
         priorityScore: 45.7,
         priorityLevel: PriorityLevel.urgentHealth,
         urgentHealth: true,
-        escalating: false,
         isRepeat: false,
         state: IncidentState.newIncident,
         distinctDevices: 2,
         maxDurationDays: 1,
         reportCount: 2,
-        confidenceLabel: 'low',
         issueType: IssueType.contamination,
+        rank: 1,
         explanation:
-            'تم تصدير الحي تلقائياً وفق القاعدة الذهبية لوجود بلاغين عن تلوث ورائحة غير طبيعية في المياه من جهازين مستقلين خلال آخر 6 ساعات، مما يستدعي فحصاً ميدانياً عاجلاً.',
+            'تصدّر حي المنصورة الأولوية وفق القاعدة الذهبية لوجود بلاغين مستقلين عن تلوث ورائحة غير طبيعية في المياه، مما يستدعي فحصاً ميدانياً عاجلاً.',
+        explanationFromModel: true,
+        embeddedPrediction: predictionsByNeighborhood['nb-mansoura'],
         lastReportAt: now.subtract(const Duration(minutes: 40)),
         updatedAt: now.subtract(const Duration(minutes: 40)),
         reports: [
@@ -103,16 +140,17 @@ abstract final class DemoDashboardData {
         priorityScore: 79.0,
         priorityLevel: PriorityLevel.high,
         urgentHealth: false,
-        escalating: true,
         isRepeat: false,
         state: IncidentState.confirmed,
         distinctDevices: 9,
         maxDurationDays: 4,
         reportCount: 11,
-        confidenceLabel: 'high',
         issueType: IssueType.outage,
+        rank: 2,
         explanation:
-            '9 أجهزة مختلفة أبلغت خلال يومين، وأطول مدة انقطاع مسجّلة 4 أيام مع تصاعد ملحوظ في وتيرة البلاغات. مستوى الثقة عالٍ.',
+            'يحتل حي الشرقية أعلى أولوية لانقطاع المياه بعد بلاغات من 9 أجهزة مستقلة، مع تجاوز مدة الانقطاع (4 أيام) للدورة المعتادة مما يرجّح عطلاً في الخط.',
+        explanationFromModel: true,
+        embeddedPrediction: predictionsByNeighborhood['nb-sharqiya'],
         lastReportAt: now.subtract(const Duration(hours: 3)),
         updatedAt: now.subtract(const Duration(hours: 2)),
         reports: [
@@ -146,16 +184,17 @@ abstract final class DemoDashboardData {
         priorityScore: 59.4,
         priorityLevel: PriorityLevel.medium,
         urgentHealth: false,
-        escalating: false,
         isRepeat: true,
         state: IncidentState.inProgress,
         distinctDevices: 3,
         maxDurationDays: 3,
         reportCount: 4,
-        confidenceLabel: 'medium',
         issueType: IssueType.outage,
+        rank: 3,
         explanation:
-            '3 أجهزة مختلفة أبلغت عن انقطاع مستمر منذ 3 أيام، مع تسجيل تكرار للانقطاع خلال الدورتين السابقتين؛ الحالة قيد المتابعة الميدانية.',
+            'حالة انقطاع متكررة في حي الغربية قيد المتابعة الميدانية حالياً، والمدة الحالية لا تزال ضمن النطاق المعتاد لدورة الضخ.',
+        explanationFromModel: false,
+        embeddedPrediction: predictionsByNeighborhood['nb-gharbiya'],
         lastReportAt: now.subtract(const Duration(hours: 6)),
         updatedAt: now.subtract(const Duration(hours: 4)),
         reports: [
@@ -180,37 +219,4 @@ abstract final class DemoDashboardData {
     list.sort(IncidentModel.compareByPriority);
     return list;
   }
-
-  static final Map<String, PredictionModel> predictionsByNeighborhood = {
-    'nb-sharqiya': const PredictionModel(
-      neighborhoodId: 'nb-sharqiya',
-      cycleMean: 8.7,
-      ci90Low: 7.8,
-      ci90High: 9.7,
-      probArrival2d: 0.24,
-      probLate: 0.81,
-      abnormalDelay: true,
-      basis: '6 ملاحظات تاريخية للنوبة',
-    ),
-    'nb-gharbiya': const PredictionModel(
-      neighborhoodId: 'nb-gharbiya',
-      cycleMean: 6.4,
-      ci90Low: 5.9,
-      ci90High: 7.1,
-      probArrival2d: 0.68,
-      probLate: 0.32,
-      abnormalDelay: false,
-      basis: '9 ملاحظات تاريخية للنوبة',
-    ),
-    'nb-mansoura': const PredictionModel(
-      neighborhoodId: 'nb-mansoura',
-      cycleMean: 7.2,
-      ci90Low: 6.4,
-      ci90High: 8.1,
-      probArrival2d: 0.55,
-      probLate: 0.41,
-      abnormalDelay: false,
-      basis: '5 ملاحظات تاريخية للنوبة',
-    ),
-  };
 }

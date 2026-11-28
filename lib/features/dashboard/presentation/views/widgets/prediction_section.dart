@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:gtra_dashboard/core/common/widgets/status_badge.dart';
 import 'package:gtra_dashboard/core/constants/app_strings.dart';
 import 'package:gtra_dashboard/core/extensions/screen_context_extension.dart';
 import 'package:gtra_dashboard/core/themes/app_color.dart';
@@ -7,7 +6,7 @@ import 'package:gtra_dashboard/core/themes/app_theme.dart';
 import 'package:gtra_dashboard/features/dashboard/data/models/prediction_model.dart';
 import 'package:gtra_dashboard/features/dashboard/presentation/view_model/dashboard_state.dart';
 
-class PredictionSection extends StatelessWidget {
+class PredictionSection extends StatefulWidget {
   const PredictionSection({
     super.key,
     required this.status,
@@ -22,78 +21,84 @@ class PredictionSection extends StatelessWidget {
   final VoidCallback onRetry;
 
   @override
+  State<PredictionSection> createState() => _PredictionSectionState();
+}
+
+class _PredictionSectionState extends State<PredictionSection> {
+  bool _showDetails = false;
+
+  @override
+  void didUpdateWidget(covariant PredictionSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.prediction?.neighborhoodId !=
+        widget.prediction?.neighborhoodId) {
+      _showDetails = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final isAbnormal =
-        status == DashboardRequestStatus.success &&
-        (prediction?.abnormalDelay ?? false);
+    final pred = widget.prediction;
+    final hasData =
+        widget.status == DashboardRequestStatus.success && pred != null;
+    final isAbnormal = hasData && pred.abnormalDelay;
+    final isInsufficient = hasData && !isAbnormal && pred.isPriorOnly;
+
+    final Color bgColor = isAbnormal
+        ? AppColor.abnormalDelayBg.withValues(alpha: 0.45)
+        : isInsufficient
+        ? AppColor.surfaceSoft
+        : hasData
+        ? AppColor.primarySoft.withValues(alpha: 0.4)
+        : AppColor.surfaceSoft;
+
+    final Color borderColor = isAbnormal
+        ? AppColor.abnormalDelayBorder
+        : isInsufficient
+        ? AppColor.border
+        : hasData
+        ? AppColor.primaryBorder
+        : AppColor.border;
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isAbnormal
-            ? AppColor.abnormalDelayBg.withValues(alpha: 0.4)
-            : AppColor.surfaceSoft,
+        color: bgColor,
         borderRadius: BorderRadius.circular(AppTheme.innerCardRadius),
         border: Border.all(
-          color: isAbnormal ? AppColor.abnormalDelayBorder : AppColor.border,
-          width: isAbnormal ? 1.3 : 1,
+          color: borderColor,
+          width: isAbnormal ? 1.4 : 1,
         ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 8,
-            runSpacing: 8,
+          Row(
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.auto_graph_rounded,
-                    size: 18,
-                    color: isAbnormal
-                        ? AppColor.abnormalDelayText
-                        : AppColor.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    AppStrings.predictionTitle,
-                    style: context.textTheme.titleSmall?.copyWith(
-                      color: AppColor.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
+              Icon(
+                Icons.auto_graph_rounded,
+                size: 18,
+                color: isAbnormal
+                    ? AppColor.abnormalDelayText
+                    : AppColor.primaryDark,
               ),
-              if (status == DashboardRequestStatus.success &&
-                  prediction != null)
-                StatusBadge(
-                  label: prediction!.abnormalDelay
-                      ? AppStrings.abnormalDelayBadge
-                      : AppStrings.normalCycleBadge,
-                  backgroundColor: prediction!.abnormalDelay
-                      ? AppColor.abnormalDelayBg
-                      : AppColor.primarySoft,
-                  foregroundColor: prediction!.abnormalDelay
-                      ? AppColor.abnormalDelayText
-                      : AppColor.primaryDark,
-                  borderColor: prediction!.abnormalDelay
-                      ? AppColor.abnormalDelayBorder
-                      : AppColor.primaryBorder,
-                  icon: prediction!.abnormalDelay
-                      ? Icons.warning_amber_rounded
-                      : Icons.check_circle_outline_rounded,
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  AppStrings.predictionQuestionTitle,
+                  style: context.textTheme.titleSmall?.copyWith(
+                    color: AppColor.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
-          if (status == DashboardRequestStatus.loading ||
-              status == DashboardRequestStatus.initial)
+          if (widget.status == DashboardRequestStatus.loading ||
+              widget.status == DashboardRequestStatus.initial)
             Row(
               children: [
                 const SizedBox(
@@ -108,22 +113,142 @@ class PredictionSection extends StatelessWidget {
                 ),
               ],
             )
-          else if (status == DashboardRequestStatus.failure ||
-              prediction == null)
+          else if (widget.status == DashboardRequestStatus.failure ||
+              pred == null)
             _PredictionFallback(
-              errorMessage: errorMessage,
-              onRetry: onRetry,
+              errorMessage: widget.errorMessage,
+              onRetry: widget.onRetry,
             )
           else
-            _PredictionContent(prediction: prediction!),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Single Operational Verdict Headline
+                _VerdictBanner(prediction: pred),
+                const SizedBox(height: 8),
+
+                // Collapsible Statistical Details Toggle
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 4,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () =>
+                        setState(() => _showDetails = !_showDetails),
+                    icon: Icon(
+                      _showDetails
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 18,
+                    ),
+                    label: Text(
+                      _showDetails
+                          ? AppStrings.hideStatisticalDetails
+                          : AppStrings.showStatisticalDetails,
+                      style: context.textTheme.labelMedium?.copyWith(
+                        color: AppColor.primaryDark,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+
+                if (_showDetails) ...[
+                  const SizedBox(height: 10),
+                  _StatisticalDetailsGrid(prediction: pred),
+                ],
+              ],
+            ),
         ],
       ),
     );
   }
 }
 
-class _PredictionContent extends StatelessWidget {
-  const _PredictionContent({required this.prediction});
+class _VerdictBanner extends StatelessWidget {
+  const _VerdictBanner({required this.prediction});
+
+  final PredictionModel prediction;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isAbnormal = prediction.abnormalDelay;
+    final bool isPriorOnly = prediction.isPriorOnly;
+
+    final IconData icon;
+    final Color accentColor;
+    final String headline;
+    final String subtitle;
+
+    final cycleText = prediction.cycleMean != null
+        ? '${prediction.cycleMean!.toStringAsFixed(1)} يوم'
+        : AppStrings.notAvailableShort;
+
+    if (isAbnormal) {
+      icon = Icons.warning_amber_rounded;
+      accentColor = AppColor.abnormalDelayText;
+      headline = AppStrings.abnormalDelayVerdict;
+      final latePart = prediction.probLate != null
+          ? ' · ${AppStrings.probLateLabel}: ${AppStrings.percentageLabel(prediction.probLate!)}'
+          : '';
+      subtitle = 'الدورة المعتادة للحي نحو $cycleText$latePart';
+    } else if (isPriorOnly) {
+      icon = Icons.info_outline_rounded;
+      accentColor = AppColor.textSecondary;
+      headline = AppStrings.insufficientHistoryVerdict;
+      subtitle = 'تقدير مبدئي للدورة: كل نحو $cycleText (دون ملاحظات سابقة للحي)';
+    } else {
+      icon = Icons.check_circle_outline_rounded;
+      accentColor = AppColor.success;
+      headline = AppStrings.normalCycleVerdict;
+      final arrivalPart = prediction.probArrival2d != null
+          ? ' · احتمال الوصول خلال يومين ${AppStrings.percentageLabel(prediction.probArrival2d!)}'
+          : '';
+      subtitle = 'الدورة المعتادة نحو $cycleText$arrivalPart';
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 20, color: accentColor),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                headline,
+                style: context.textTheme.titleSmall?.copyWith(
+                  color: accentColor,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: context.textTheme.bodySmall?.copyWith(
+                  color: AppColor.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatisticalDetailsGrid extends StatelessWidget {
+  const _StatisticalDetailsGrid({required this.prediction});
 
   final PredictionModel prediction;
 
@@ -133,8 +258,8 @@ class _PredictionContent extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
-          spacing: 10,
-          runSpacing: 10,
+          spacing: 8,
+          runSpacing: 8,
           children: [
             _PredictionMetricChip(
               label: AppStrings.cycleMeanLabel,
@@ -168,11 +293,11 @@ class _PredictionContent extends StatelessWidget {
           ],
         ),
         if (prediction.basis != null && prediction.basis!.isNotEmpty) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           Text(
             '${AppStrings.basisLabel}: ${prediction.basis}',
             style: context.textTheme.bodySmall?.copyWith(
-              color: AppColor.textSecondary,
+              color: AppColor.textMuted,
             ),
           ),
         ],
@@ -195,8 +320,8 @@ class _PredictionMetricChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minWidth: 120),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      constraints: const BoxConstraints(minWidth: 112),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
         color: AppColor.surface,
         borderRadius: BorderRadius.circular(10),

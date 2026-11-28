@@ -42,9 +42,9 @@ class PrioritySidebar extends StatelessWidget {
           state.isDemoMode ? AppStrings.demoSubtitle : AppStrings.liveSubtitle,
           style: context.textTheme.bodySmall,
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
 
-        // Filter Chips
+        // Filter Chips (All / UrgentHealth / InProgress)
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -82,7 +82,7 @@ class PrioritySidebar extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  state.incidents.isEmpty
+                  state.activeIncidents.isEmpty
                       ? AppStrings.noActiveIncidents
                       : AppStrings.noIncidentsMatchFilter,
                   textAlign: TextAlign.center,
@@ -100,7 +100,7 @@ class PrioritySidebar extends StatelessWidget {
             itemBuilder: (context, index) {
               final incident = filtered[index];
               return IncidentPriorityCard(
-                rank: index + 1,
+                rank: incident.rank ?? (index + 1),
                 incident: incident,
                 isSelected: incident.id == state.selectedIncidentId,
                 onTap: () => onIncidentSelected(incident),
@@ -116,7 +116,7 @@ class PrioritySidebar extends StatelessWidget {
               itemBuilder: (context, index) {
                 final incident = filtered[index];
                 return IncidentPriorityCard(
-                  rank: index + 1,
+                  rank: incident.rank ?? (index + 1),
                   incident: incident,
                   isSelected: incident.id == state.selectedIncidentId,
                   onTap: () => onIncidentSelected(incident),
@@ -125,7 +125,7 @@ class PrioritySidebar extends StatelessWidget {
             ),
           ),
 
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         // Quiet Neighborhoods Footer
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -144,11 +144,9 @@ class PrioritySidebar extends StatelessWidget {
   int? _countForFilter(DashboardFilter filter) {
     switch (filter) {
       case DashboardFilter.all:
-        return state.incidents.length;
+        return state.activeIncidents.length;
       case DashboardFilter.urgentHealth:
         return state.urgentHealthCount > 0 ? state.urgentHealthCount : null;
-      case DashboardFilter.confirmed:
-        return state.confirmedCount > 0 ? state.confirmedCount : null;
       case DashboardFilter.inProgress:
         return state.inProgressCount > 0 ? state.inProgressCount : null;
     }

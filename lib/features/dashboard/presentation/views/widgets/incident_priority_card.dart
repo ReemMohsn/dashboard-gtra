@@ -22,11 +22,19 @@ class IncidentPriorityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isAbnormalDelay = incident.embeddedPrediction?.abnormalDelay == true;
+
     final borderColor = isSelected
         ? AppColor.primary
         : incident.urgentHealth
-        ? AppColor.urgentHealth.withValues(alpha: 0.35)
+        ? AppColor.urgentHealth.withValues(alpha: 0.55)
         : AppColor.border;
+
+    final bgColor = isSelected
+        ? AppColor.primarySoft.withValues(alpha: 0.38)
+        : incident.urgentHealth
+        ? AppColor.urgentHealthSoft.withValues(alpha: 0.45)
+        : AppColor.surface;
 
     return Material(
       color: Colors.transparent,
@@ -37,13 +45,11 @@ class IncidentPriorityCard extends StatelessWidget {
           duration: const Duration(milliseconds: 180),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: isSelected
-                ? AppColor.primarySoft.withValues(alpha: 0.38)
-                : AppColor.surface,
+            color: bgColor,
             borderRadius: BorderRadius.circular(AppTheme.innerCardRadius),
             border: Border.all(
               color: borderColor,
-              width: isSelected ? 1.7 : 1,
+              width: isSelected || incident.urgentHealth ? 1.6 : 1,
             ),
             boxShadow: isSelected
                 ? [
@@ -58,7 +64,7 @@ class IncidentPriorityCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top row: Rank + Neighborhood Name + Score
+              // Row 1: Rank + Neighborhood Name + Small Subtle Score
               Row(
                 children: [
                   Container(
@@ -67,7 +73,7 @@ class IncidentPriorityCard extends StatelessWidget {
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: incident.urgentHealth
-                          ? AppColor.urgentHealthSoft
+                          ? AppColor.urgentHealth
                           : AppColor.primarySoft,
                       borderRadius: BorderRadius.circular(7),
                     ),
@@ -75,7 +81,7 @@ class IncidentPriorityCard extends StatelessWidget {
                       '$rank',
                       style: context.textTheme.labelMedium?.copyWith(
                         color: incident.urgentHealth
-                            ? AppColor.urgentHealth
+                            ? AppColor.onPrimary
                             : AppColor.primaryDark,
                         fontWeight: FontWeight.w800,
                       ),
@@ -88,57 +94,75 @@ class IncidentPriorityCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: context.textTheme.titleMedium?.copyWith(
-                        fontSize: 15.5,
+                        fontSize: 15,
                         color: AppColor.textPrimary,
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    incident.priorityScore.toStringAsFixed(1),
-                    style: context.textTheme.titleMedium?.copyWith(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: AppColor.textPrimary,
+                  Tooltip(
+                    message: AppStrings.scoreTooltip,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColor.surfaceMuted,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        incident.priorityScore.toStringAsFixed(1),
+                        style: context.textTheme.bodySmall?.copyWith(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColor.textSecondary,
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
 
-              // Badges row: Golden Rule / Priority + Confidence + State + Escalating + IsRepeat
+              // Row 2: Key Facts (issue type · devices · duration · last report)
+              Text(
+                _buildMetaSummary(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: context.textTheme.bodyMedium?.copyWith(
+                  fontSize: 13,
+                  color: AppColor.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 9),
+
+              // Row 3: Actionable Badges Only (UrgentHealth / State / AbnormalDelay / Repeat)
               Wrap(
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  StatusBadge(
-                    label: incident.priorityLevel.arabicLabel,
-                    backgroundColor: incident.priorityLevel.color,
-                    foregroundColor: AppColor.onPrimary,
-                    icon: incident.urgentHealth
-                        ? Icons.warning_amber_rounded
-                        : null,
-                    tooltip: incident.urgentHealth
-                        ? AppStrings.goldenRuleTooltip
-                        : null,
-                  ),
-                  StatusBadge(
-                    label: incident.resolvedConfidenceLabel,
-                    backgroundColor: AppColor.neutralBadgeBg,
-                    foregroundColor: AppColor.neutralBadgeText,
-                    borderColor: AppColor.neutralBadgeBorder,
-                  ),
+                  if (incident.urgentHealth)
+                    const StatusBadge(
+                      label: AppStrings.priorityUrgentHealth,
+                      backgroundColor: AppColor.urgentHealth,
+                      foregroundColor: AppColor.onPrimary,
+                      icon: Icons.warning_amber_rounded,
+                      tooltip: AppStrings.goldenRuleTooltip,
+                    ),
                   StatusBadge(
                     label: incident.state.arabicLabel,
                     backgroundColor: incident.state.color,
                     foregroundColor: AppColor.onPrimary,
                   ),
-                  if (incident.escalating)
+                  if (isAbnormalDelay)
                     const StatusBadge(
-                      label: AppStrings.escalating,
-                      backgroundColor: AppColor.escalatingBg,
-                      foregroundColor: AppColor.escalatingText,
-                      borderColor: AppColor.escalatingBorder,
+                      label: AppStrings.abnormalDelayShort,
+                      backgroundColor: AppColor.abnormalDelayBg,
+                      foregroundColor: AppColor.abnormalDelayText,
+                      borderColor: AppColor.abnormalDelayBorder,
+                      icon: Icons.warning_amber_rounded,
                     ),
                   if (incident.isRepeat)
                     const StatusBadge(
@@ -147,23 +171,6 @@ class IncidentPriorityCard extends StatelessWidget {
                       foregroundColor: AppColor.repeatText,
                       borderColor: AppColor.repeatBorder,
                     ),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              // Metadata summary: issue type · devices · max duration
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _buildMetaSummary(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.textTheme.bodySmall?.copyWith(
-                        color: AppColor.textSecondary,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ],
@@ -180,6 +187,10 @@ class IncidentPriorityCard extends StatelessWidget {
     ];
     if (incident.maxDurationDays > 0) {
       parts.add(AppStrings.daysDurationLabel(incident.maxDurationDays));
+    }
+    final lastAt = incident.lastReportAt ?? incident.updatedAt;
+    if (lastAt != null) {
+      parts.add(AppStrings.relativeTime(lastAt));
     }
     return parts.join(' · ');
   }

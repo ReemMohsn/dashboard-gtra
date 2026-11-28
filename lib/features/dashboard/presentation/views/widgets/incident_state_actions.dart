@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:gtra_dashboard/core/constants/app_strings.dart';
-import 'package:gtra_dashboard/core/extensions/screen_context_extension.dart';
 import 'package:gtra_dashboard/core/themes/app_color.dart';
-import 'package:gtra_dashboard/core/themes/app_theme.dart';
 import 'package:gtra_dashboard/features/dashboard/data/models/incident_enums.dart';
 
 class IncidentStateActions extends StatelessWidget {
@@ -12,107 +10,73 @@ class IncidentStateActions extends StatelessWidget {
     required this.isUpdating,
     required this.updatingTargetState,
     required this.onChangeState,
+    this.compact = false,
   });
 
   final IncidentState currentState;
   final bool isUpdating;
   final IncidentState? updatingTargetState;
   final ValueChanged<IncidentState> onChangeState;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final isInProgressCurrent = currentState == IncidentState.inProgress;
     final isResolvedCurrent = currentState == IncidentState.resolved;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final buttonStyleElevated = compact
+        ? ElevatedButton.styleFrom(
+            minimumSize: const Size(0, 38),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          )
+        : null;
+    final buttonStyleOutlined = compact
+        ? OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 38),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          )
+        : null;
+
+    final inProgressButton = ElevatedButton(
+      style: buttonStyleElevated,
+      onPressed: isUpdating || isInProgressCurrent
+          ? null
+          : () => onChangeState(IncidentState.inProgress),
+      child: _ButtonLabel(
+        label: AppStrings.stateInProgress,
+        isBusy:
+            isUpdating && updatingTargetState == IncidentState.inProgress,
+        isActiveCurrent: isInProgressCurrent,
+        spinnerColor: AppColor.onPrimary,
+      ),
+    );
+
+    final resolvedButton = OutlinedButton(
+      style: buttonStyleOutlined,
+      onPressed: isUpdating || isResolvedCurrent
+          ? null
+          : () => onChangeState(IncidentState.resolved),
+      child: _ButtonLabel(
+        label: AppStrings.stateResolved,
+        isBusy: isUpdating && updatingTargetState == IncidentState.resolved,
+        isActiveCurrent: isResolvedCurrent,
+        spinnerColor: AppColor.primary,
+      ),
+    );
+
+    if (compact) {
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [inProgressButton, resolvedButton],
+      );
+    }
+
+    return Row(
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton(
-                onPressed: isUpdating || isInProgressCurrent
-                    ? null
-                    : () => onChangeState(IncidentState.inProgress),
-                child: _ButtonLabel(
-                  label: AppStrings.stateInProgress,
-                  isBusy:
-                      isUpdating &&
-                      updatingTargetState == IncidentState.inProgress,
-                  isActiveCurrent: isInProgressCurrent,
-                  spinnerColor: AppColor.onPrimary,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton(
-                onPressed: isUpdating || isResolvedCurrent
-                    ? null
-                    : () => onChangeState(IncidentState.resolved),
-                child: _ButtonLabel(
-                  label: AppStrings.stateResolved,
-                  isBusy:
-                      isUpdating &&
-                      updatingTargetState == IncidentState.resolved,
-                  isActiveCurrent: isResolvedCurrent,
-                  spinnerColor: AppColor.primary,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            PopupMenuButton<IncidentState>(
-              tooltip: AppStrings.moreStatesLabel,
-              enabled: !isUpdating,
-              onSelected: onChangeState,
-              itemBuilder: (context) => IncidentState.values
-                  .map(
-                    (state) => PopupMenuItem<IncidentState>(
-                      value: state,
-                      enabled: state != currentState,
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 9,
-                            height: 9,
-                            decoration: BoxDecoration(
-                              color: state.color,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            state.arabicLabel,
-                            style: context.textTheme.bodyMedium?.copyWith(
-                              color: state == currentState
-                                  ? AppColor.textMuted
-                                  : AppColor.textPrimary,
-                              fontWeight: state == currentState
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                  .toList(growable: false),
-              child: Container(
-                height: 44,
-                width: 44,
-                decoration: BoxDecoration(
-                  color: AppColor.surfaceSoft,
-                  borderRadius: BorderRadius.circular(AppTheme.buttonRadius),
-                  border: Border.all(color: AppColor.border),
-                ),
-                child: const Icon(
-                  Icons.more_vert_rounded,
-                  color: AppColor.textSecondary,
-                ),
-              ),
-            ),
-          ],
-        ),
+        Expanded(child: inProgressButton),
+        const SizedBox(width: 12),
+        Expanded(child: resolvedButton),
       ],
     );
   }
@@ -135,8 +99,8 @@ class _ButtonLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     if (isBusy) {
       return SizedBox(
-        width: 18,
-        height: 18,
+        width: 16,
+        height: 16,
         child: CircularProgressIndicator(strokeWidth: 2, color: spinnerColor),
       );
     }
@@ -146,8 +110,8 @@ class _ButtonLabel extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (isActiveCurrent) ...[
-          const Icon(Icons.check_rounded, size: 17),
-          const SizedBox(width: 6),
+          const Icon(Icons.check_rounded, size: 16),
+          const SizedBox(width: 5),
         ],
         Text(label),
       ],

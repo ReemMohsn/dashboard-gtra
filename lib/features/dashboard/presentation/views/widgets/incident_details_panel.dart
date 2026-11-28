@@ -19,6 +19,7 @@ class IncidentDetailsPanel extends StatelessWidget {
     required this.onRetryDetails,
     required this.onRetryPrediction,
     required this.onChangeState,
+    this.shrinkWrap = false,
   });
 
   final DashboardState state;
@@ -26,6 +27,7 @@ class IncidentDetailsPanel extends StatelessWidget {
   final VoidCallback onRetryDetails;
   final VoidCallback onRetryPrediction;
   final ValueChanged<IncidentState> onChangeState;
+  final bool shrinkWrap;
 
   @override
   Widget build(BuildContext context) {
@@ -43,143 +45,174 @@ class IncidentDetailsPanel extends StatelessWidget {
       );
     }
 
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: AppTheme.cardDecoration(),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Back to Map Button (matches PDF Page 7)
-            Row(
+    final bodyContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Non-blocking error notice if details refresh fails
+        if (state.detailsStatus == DashboardRequestStatus.failure &&
+            state.detailsErrorMessage != null) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            decoration: BoxDecoration(
+              color: AppColor.abnormalDelayBg.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColor.abnormalDelayBorder),
+            ),
+            child: Row(
               children: [
-                TextButton.icon(
-                  onPressed: onBackToMap,
-                  icon: const Icon(Icons.chevron_left_rounded, size: 20),
-                  label: const Text(AppStrings.backToMap),
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 18,
+                  color: AppColor.abnormalDelayText,
                 ),
-                const Spacer(),
-                if (state.detailsStatus == DashboardRequestStatus.loading)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        AppStrings.loadingDetails,
-                        style: context.textTheme.bodySmall,
-                      ),
-                    ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    state.detailsErrorMessage!,
+                    style: context.textTheme.bodySmall?.copyWith(
+                      color: AppColor.abnormalDelayText,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
+                ),
+                TextButton(
+                  onPressed: onRetryDetails,
+                  child: const Text(AppStrings.retry),
+                ),
               ],
             ),
-            const SizedBox(height: 8),
+          ),
+          const SizedBox(height: 14),
+        ],
 
-            // Details fetch error notice (non-blocking if basic summary exists)
-            if (state.detailsStatus == DashboardRequestStatus.failure &&
-                state.detailsErrorMessage != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 10,
+        // Two-Column Body: (1) Why + Verdict, (2) Linked Reports
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 640;
+            final primaryColumn = _PrimaryDetailsColumn(
+              incident: incident,
+              state: state,
+              onRetryPrediction: onRetryPrediction,
+            );
+            final reportsColumn = _MergedReportsColumn(
+              reports: incident.reports,
+              isLoading:
+                  state.detailsStatus == DashboardRequestStatus.loading &&
+                  incident.reports.isEmpty,
+            );
+
+            if (isWide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 6, child: primaryColumn),
+                  const SizedBox(width: 20),
+                  Expanded(flex: 5, child: reportsColumn),
+                ],
+              );
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                primaryColumn,
+                const SizedBox(height: 20),
+                reportsColumn,
+              ],
+            );
+          },
+        ),
+      ],
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: AppTheme.cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: shrinkWrap ? MainAxisSize.min : MainAxisSize.max,
+        children: [
+          // Fixed Top Bar: Back to Map + Loading Status
+          Row(
+            children: [
+              TextButton.icon(
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 4,
+                  ),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
-                decoration: BoxDecoration(
-                  color: AppColor.abnormalDelayBg.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColor.abnormalDelayBorder),
-                ),
-                child: Row(
+                onPressed: onBackToMap,
+                icon: const Icon(Icons.chevron_left_rounded, size: 20),
+                label: const Text(AppStrings.backToMap),
+              ),
+              const Spacer(),
+              if (state.detailsStatus == DashboardRequestStatus.loading)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.info_outline_rounded,
-                      size: 18,
-                      color: AppColor.abnormalDelayText,
+                    const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        state.detailsErrorMessage!,
-                        style: context.textTheme.bodySmall?.copyWith(
-                          color: AppColor.abnormalDelayText,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: onRetryDetails,
-                      child: const Text(AppStrings.retry),
+                    Text(
+                      AppStrings.loadingDetails,
+                      style: context.textTheme.bodySmall,
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 14),
             ],
+          ),
+          const SizedBox(height: 10),
 
-            // Incident Header (Name + Badges + Priority Score)
-            _IncidentDetailsHeader(incident: incident),
-            const SizedBox(height: 20),
+          // Fixed Header: Neighborhood Name + Badges + State Actions right on top!
+          _IncidentDetailsHeader(
+            incident: incident,
+            isUpdating: state.isUpdatingState,
+            updatingTargetState: state.updatingTargetState,
+            onChangeState: onChangeState,
+          ),
+          const SizedBox(height: 14),
+          const Divider(),
+          const SizedBox(height: 14),
 
-            // Two-Column Body (Desktop) or Single Column (Tablet/Mobile)
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 660;
-                final primaryColumn = _PrimaryDetailsColumn(
-                  incident: incident,
-                  state: state,
-                  onRetryPrediction: onRetryPrediction,
-                  onChangeState: onChangeState,
-                );
-                final reportsColumn = _MergedReportsColumn(
-                  reports: incident.reports,
-                  isLoading:
-                      state.detailsStatus == DashboardRequestStatus.loading &&
-                      incident.reports.isEmpty,
-                );
-
-                if (isWide) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 6, child: primaryColumn),
-                      const SizedBox(width: 20),
-                      Expanded(flex: 5, child: reportsColumn),
-                    ],
-                  );
-                }
-
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    primaryColumn,
-                    const SizedBox(height: 20),
-                    reportsColumn,
-                  ],
-                );
-              },
-            ),
-          ],
-        ),
+          if (shrinkWrap)
+            bodyContent
+          else
+            Expanded(child: SingleChildScrollView(child: bodyContent)),
+        ],
       ),
     );
   }
 }
 
 class _IncidentDetailsHeader extends StatelessWidget {
-  const _IncidentDetailsHeader({required this.incident});
+  const _IncidentDetailsHeader({
+    required this.incident,
+    required this.isUpdating,
+    required this.updatingTargetState,
+    required this.onChangeState,
+  });
 
   final IncidentModel incident;
+  final bool isUpdating;
+  final IncidentState? updatingTargetState;
+  final ValueChanged<IncidentState> onChangeState;
 
   @override
   Widget build(BuildContext context) {
     return Wrap(
       alignment: WrapAlignment.spaceBetween,
       crossAxisAlignment: WrapCrossAlignment.center,
-      spacing: 16,
-      runSpacing: 12,
+      spacing: 14,
+      runSpacing: 10,
       children: [
         Wrap(
           crossAxisAlignment: WrapCrossAlignment.center,
@@ -189,31 +222,23 @@ class _IncidentDetailsHeader extends StatelessWidget {
             Text(
               incident.neighborhoodName,
               style: context.textTheme.headlineMedium?.copyWith(
+                fontSize: 20,
                 fontWeight: FontWeight.w800,
               ),
             ),
-            const SizedBox(width: 4),
-            StatusBadge(
-              label: incident.priorityLevel.arabicLabel,
-              backgroundColor: incident.priorityLevel.color,
-              foregroundColor: AppColor.onPrimary,
-              icon: incident.urgentHealth ? Icons.warning_amber_rounded : null,
-              tooltip: incident.urgentHealth
-                  ? AppStrings.goldenRuleTooltip
-                  : null,
-            ),
+            if (incident.urgentHealth)
+              const StatusBadge(
+                label: AppStrings.priorityUrgentHealth,
+                backgroundColor: AppColor.urgentHealth,
+                foregroundColor: AppColor.onPrimary,
+                icon: Icons.warning_amber_rounded,
+                tooltip: AppStrings.goldenRuleTooltip,
+              ),
             StatusBadge(
               label: incident.state.arabicLabel,
               backgroundColor: incident.state.color,
               foregroundColor: AppColor.onPrimary,
             ),
-            if (incident.escalating)
-              const StatusBadge(
-                label: AppStrings.escalating,
-                backgroundColor: AppColor.escalatingBg,
-                foregroundColor: AppColor.escalatingText,
-                borderColor: AppColor.escalatingBorder,
-              ),
             if (incident.isRepeat)
               const StatusBadge(
                 label: AppStrings.repeatIncident,
@@ -221,28 +246,31 @@ class _IncidentDetailsHeader extends StatelessWidget {
                 foregroundColor: AppColor.repeatText,
                 borderColor: AppColor.repeatBorder,
               ),
+            Tooltip(
+              message: AppStrings.scoreTooltip,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: AppColor.surfaceMuted,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '${incident.priorityScore.toStringAsFixed(1)} ${AppStrings.outOfHundred}',
+                  style: context.textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: AppColor.textSecondary,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              incident.priorityScore.toStringAsFixed(1),
-              style: context.textTheme.headlineLarge?.copyWith(
-                fontSize: 30,
-                color: AppColor.textPrimary,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '${AppStrings.outOfHundred} · ${incident.resolvedConfidenceLabel}',
-              style: context.textTheme.bodySmall?.copyWith(
-                color: AppColor.textSecondary,
-              ),
-            ),
-          ],
+        IncidentStateActions(
+          currentState: incident.state,
+          isUpdating: isUpdating,
+          updatingTargetState: updatingTargetState,
+          onChangeState: onChangeState,
+          compact: true,
         ),
       ],
     );
@@ -254,13 +282,11 @@ class _PrimaryDetailsColumn extends StatelessWidget {
     required this.incident,
     required this.state,
     required this.onRetryPrediction,
-    required this.onChangeState,
   });
 
   final IncidentModel incident;
   final DashboardState state;
   final VoidCallback onRetryPrediction;
-  final ValueChanged<IncidentState> onChangeState;
 
   @override
   Widget build(BuildContext context) {
@@ -272,10 +298,10 @@ class _PrimaryDetailsColumn extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Neuro-Symbolic AI Explanation Card
+        // Section 1: "لماذا هذا الحي؟" (Explanation + Compact Facts Strip)
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(15),
           decoration: BoxDecoration(
             color: AppColor.explanationSurface,
             borderRadius: BorderRadius.circular(AppTheme.innerCardRadius),
@@ -284,19 +310,40 @@ class _PrimaryDetailsColumn extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 6,
                 children: [
-                  const Icon(
-                    Icons.psychology_alt_outlined,
-                    size: 18,
-                    color: AppColor.primaryDark,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.psychology_alt_outlined,
+                        size: 18,
+                        color: AppColor.primaryDark,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        AppStrings.whyThisNeighborhoodTitle,
+                        style: context.textTheme.titleSmall?.copyWith(
+                          color: AppColor.primaryDark,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    AppStrings.explanationTitle,
-                    style: context.textTheme.titleSmall?.copyWith(
-                      color: AppColor.primaryDark,
-                      fontWeight: FontWeight.w700,
+                  StatusBadge(
+                    label: incident.explanationFromModel
+                        ? AppStrings.explanationFromAiBadge
+                        : AppStrings.explanationFromTemplateBadge,
+                    backgroundColor: AppColor.surface.withValues(alpha: 0.85),
+                    foregroundColor: AppColor.textSecondary,
+                    borderColor: AppColor.explanationBorder,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
                     ),
                   ),
                 ],
@@ -305,104 +352,73 @@ class _PrimaryDetailsColumn extends StatelessWidget {
               Text(
                 explanationText,
                 style: context.textTheme.bodyLarge?.copyWith(
-                  fontSize: 14.5,
+                  fontSize: 14,
                   height: 1.6,
                 ),
+              ),
+              const SizedBox(height: 12),
+              // Single Compact Facts Strip (replaces redundant KPI boxes)
+              Wrap(
+                spacing: 14,
+                runSpacing: 6,
+                children: [
+                  _CompactFact(
+                    icon: Icons.devices_outlined,
+                    text: AppStrings.devicesCountLabel(
+                      incident.distinctDevices,
+                    ),
+                  ),
+                  if (incident.maxDurationDays > 0)
+                    _CompactFact(
+                      icon: Icons.schedule_rounded,
+                      text:
+                          '${AppStrings.maxOutageKpiLabel}: ${AppStrings.daysDurationLabel(incident.maxDurationDays)}',
+                    ),
+                  _CompactFact(
+                    icon: Icons.history_rounded,
+                    text:
+                        '${AppStrings.lastReportKpiLabel}: ${AppStrings.relativeTime(incident.lastReportAt ?? incident.updatedAt)}',
+                  ),
+                ],
               ),
             ],
           ),
         ),
         const SizedBox(height: 14),
 
-        // KPI Row (DistinctDevices, MaxDurationDays, LastReportAt)
-        Row(
-          children: [
-            Expanded(
-              child: _KpiMetricCard(
-                value: '${incident.distinctDevices}',
-                label: AppStrings.devicesKpiLabel,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _KpiMetricCard(
-                value: incident.maxDurationDays > 0
-                    ? AppStrings.daysDurationLabel(incident.maxDurationDays)
-                    : AppStrings.notAvailableShort,
-                label: AppStrings.maxOutageKpiLabel,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _KpiMetricCard(
-                value: AppStrings.relativeTime(
-                  incident.lastReportAt ?? incident.updatedAt,
-                ),
-                label: AppStrings.lastReportKpiLabel,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-
-        // Prediction & Abnormal Delay Section
+        // Section 2: "هل هو عطل أم انتظار طبيعي؟"
         PredictionSection(
           status: state.predictionStatus,
           prediction: state.prediction,
           errorMessage: state.predictionErrorMessage,
           onRetry: onRetryPrediction,
         ),
-        const SizedBox(height: 18),
-
-        // State Transition Controls (PATCH /api/incidents/{id}/state)
-        IncidentStateActions(
-          currentState: incident.state,
-          isUpdating: state.isUpdatingState,
-          updatingTargetState: state.updatingTargetState,
-          onChangeState: onChangeState,
-        ),
       ],
     );
   }
 }
 
-class _KpiMetricCard extends StatelessWidget {
-  const _KpiMetricCard({required this.value, required this.label});
+class _CompactFact extends StatelessWidget {
+  const _CompactFact({required this.icon, required this.text});
 
-  final String value;
-  final String label;
+  final IconData icon;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColor.surfaceSoft,
-        borderRadius: BorderRadius.circular(AppTheme.innerCardRadius),
-        border: Border.all(color: AppColor.borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.textTheme.titleLarge?.copyWith(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: AppColor.textPrimary,
-            ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: AppColor.primaryDark),
+        const SizedBox(width: 5),
+        Text(
+          text,
+          style: context.textTheme.bodySmall?.copyWith(
+            color: AppColor.textPrimary,
+            fontWeight: FontWeight.w600,
           ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: context.textTheme.bodySmall,
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

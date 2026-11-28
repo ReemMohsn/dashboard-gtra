@@ -1,3 +1,5 @@
+import 'package:gtra_dashboard/features/dashboard/data/models/report_model.dart';
+
 class PredictionModel {
   const PredictionModel({
     required this.neighborhoodId,
@@ -32,6 +34,12 @@ class PredictionModel {
   bool get hasCi90 =>
       (ci90Low != null && ci90High != null) ||
       (ci90Raw != null && ci90Raw!.isNotEmpty);
+
+  bool get isPriorOnly {
+    if (source?.toLowerCase() == 'prior_fallback') return true;
+    final lower = basis?.trim().toLowerCase() ?? '';
+    return lower.contains('prior only') || lower.startsWith('0 observations');
+  }
 
   String get formattedCi90 {
     if (ci90Low != null && ci90High != null) {
@@ -84,7 +92,7 @@ class PredictionModel {
       basisText = rawBasis.toString().trim();
     }
 
-    final generatedAt = _parseDate(
+    final generatedAt = ReportModel.parseApiUtcDate(
       json['generatedAtUtc'] ?? json['GeneratedAtUtc'],
     );
 
@@ -97,6 +105,7 @@ class PredictionModel {
       cycleMean: _parseDouble(
         details['cycleMean'] ??
             details['CycleMean'] ??
+            details['cycle_days'] ??
             json['cycleMean'] ??
             json['CycleMean'],
       ),
@@ -126,7 +135,8 @@ class PredictionModel {
       modelVersion: (json['modelVersion'] ?? json['ModelVersion'])?.toString(),
       generatedAtUtc: generatedAt,
       updatedAt:
-          _parseDate(json['updatedAt'] ?? json['UpdatedAt']) ?? generatedAt,
+          ReportModel.parseApiUtcDate(json['updatedAt'] ?? json['UpdatedAt']) ??
+          generatedAt,
     );
   }
 
@@ -144,10 +154,5 @@ class PredictionModel {
       return lower == 'true' || lower == '1' || lower == 'yes';
     }
     return false;
-  }
-
-  static DateTime? _parseDate(Object? value) {
-    if (value is String && value.isNotEmpty) return DateTime.tryParse(value);
-    return null;
   }
 }
